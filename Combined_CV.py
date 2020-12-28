@@ -226,4 +226,3 @@ for id_run in range(5):
     print(np.mean(spearman_scores))
     print("Overall score")
     print(weighted_spearman_corr(test_preds[:, 0], test_trues))
-    
