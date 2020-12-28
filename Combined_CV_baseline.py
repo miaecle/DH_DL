@@ -129,7 +129,7 @@ numeric_y_orders = normalize_order(y_orders, dist='euclidean')
 # %% Cross Validation setup
 
 for id_run in range(5):
-    print("RUN%d" % id_run)
+    print("RUN%d" % id_run, flush=True)
     test_preds = []
     test_trues = []
     spearman_scores = []
@@ -216,9 +216,9 @@ for id_run in range(5):
 
     test_preds = np.concatenate(test_preds, 0)
     test_trues = np.concatenate(test_trues, 0)
-    print("Mean scores")
+    print("Mean scores", flush=True)
     print(np.mean(spearman_scores))
-    print("Overall score")
+    print("Overall score", flush=True)
     print(weighted_spearman_corr(test_preds[:, 0], test_trues))
 
 # %% EVALUATION
