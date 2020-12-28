@@ -1,0 +1,7 @@
+data/
+model_save/
+figs/
+
+*.pyc
+*.pkl
+*.pptx
