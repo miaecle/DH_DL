@@ -75,7 +75,7 @@ species = ['mouse', 'mouse', 'mouse', 'mouse', 'mouse', 'human',
 
 normalization_method = 'rank'
 use_cytoTRACE = True
-model_root = 'model_save/cv-baseline-extra'
+model_root = 'model_save'
 
 kwargs = {}
 ### DATASET SETTING ###
@@ -174,8 +174,8 @@ for id_run in range(5):
         print("Number of test samples: %d" % test_dataset.X.shape[0])
 
         ### Define Model ###
-        # model = MLP_pred(n_dim=train_dataset.X.shape[1], **kwargs)
-        model = PoincareEmbedBaseline(n_dim=train_dataset.X.shape[1], **kwargs)
+        model = MLP_pred(n_dim=train_dataset.X.shape[1], **kwargs)
+        # model = PoincareEmbedBaseline(n_dim=train_dataset.X.shape[1], **kwargs)
         
         def evaluate(model):
             valid_preds = model.predict(valid_dataset)
