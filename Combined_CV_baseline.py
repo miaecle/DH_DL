@@ -74,7 +74,8 @@ species = ['mouse', 'mouse', 'mouse', 'mouse', 'mouse', 'human',
            'human']
 
 normalization_method = 'rank'
-use_cytoTRACE = False
+use_cytoTRACE = True
+model_root = 'model_save/cv-baseline-extra'
 
 kwargs = {}
 ### DATASET SETTING ###
@@ -173,6 +174,7 @@ for id_run in range(5):
         print("Number of test samples: %d" % test_dataset.X.shape[0])
 
         ### Define Model ###
+        # model = MLP_pred(n_dim=train_dataset.X.shape[1], **kwargs)
         model = PoincareEmbedBaseline(n_dim=train_dataset.X.shape[1], **kwargs)
         
         def evaluate(model):
@@ -185,7 +187,7 @@ for id_run in range(5):
             print("Weighted spearman-r:\t%.3f\t%.3f" % (valid_score, test_score))
             return (valid_score, test_score)
 
-        model_save = 'model_save/temp-baseline-classification-run%d/cv-baseline-%s' % (id_run, data_name)
+        model_save = os.path.join(model_root, 'cv-baseline-classification-run%d/cv-baseline-%s' % (id_run, data_name))
         os.makedirs(model_save, exist_ok=True)
         
         ### Model training ###
@@ -218,3 +220,84 @@ for id_run in range(5):
     print(np.mean(spearman_scores))
     print("Overall score")
     print(weighted_spearman_corr(test_preds[:, 0], test_trues))
+
+# %% EVALUATION
+
+test_preds = [[] for _ in range(5)]
+spearman_scores = [[] for _ in range(5)]
+
+for fold_i in range(len(data_paths)):
+    data_name = os.path.split(data_paths[fold_i])[-1].split('_downsampled')[0]
+    print(data_name)
+    
+    ### Setup datasets ###
+    test_Xs = Xs[fold_i]
+    test_ys = np.array(ys[fold_i])
+    test_y_orders = np.array(numeric_y_orders[fold_i])
+    
+    assert test_Xs.shape[0] == test_ys.shape[0] == test_y_orders.shape[0]
+
+    test_dataset = HierarchyDataLoader(test_Xs.astype(float), 
+                                       test_ys, 
+                                       y_order=test_y_orders, 
+                                       **kwargs)
+    
+    ### Define Model ###
+    model = MLP_pred(n_dim=test_dataset.X.shape[1], **kwargs)
+    # model = PoincareEmbedBaseline(n_dim=test_dataset.X.shape[1], **kwargs)
+        
+    def evaluate(model):
+        test_preds = model.predict(test_dataset)
+        test_trues = test_dataset.y_order
+        test_score = weighted_spearman_corr(test_preds, test_trues)
+        print("Weighted spearman-r:\t%.3f" % test_score)
+        return test_score
+    
+    for i in range(5):
+        model_save = os.path.join(model_root, 'cv-baseline-classification-run%d/cv-baseline-%s' % (i, data_name))
+        score_df = np.array(pd.read_csv(os.path.join(model_save, 'score_output.csv'), header=None))
+        best_model_idx = np.argmax(score_df[:, 1])
+        best_model_path = os.path.join(model_save, "save%d.pt" % score_df[best_model_idx, 0])
+        model.load_state_dict(t.load(best_model_path, map_location=lambda storage, loc: storage))
+        test_pred = model.predict(test_dataset)
+        test_preds[i].append(test_pred)
+        spearman_scores[i].append(weighted_spearman_corr(test_pred, test_dataset.y_order))
+
+
+print("Datasetname\tMean\tSD\tENSEMBLE")
+spearman_scores = np.array(spearman_scores)
+for fold_i in range(len(data_paths)):
+    data_name = os.path.split(data_paths[fold_i])[-1].split('_downsampled')[0]
+    m = np.mean(spearman_scores[:, fold_i])
+    sd = np.std(spearman_scores[:, fold_i])
+    ensemble_preds = np.concatenate([test_preds[i][fold_i] for i in range(5)], 1).mean(1)
+    ensemble_corr = weighted_spearman_corr(ensemble_preds, numeric_y_orders[fold_i])
+    print("%s\t%.3f\t%.3f\t%.3f" % 
+          (data_name, 
+           m, 
+           sd, 
+           ensemble_corr))
+    
+    # plt.clf()
+    # # test_dataset = HierarchyDataLoader(Xs[fold_i], 
+    # #                                    ys[fold_i], 
+    # #                                    y_order=y_orders[fold_i],
+    # #                                    **kwargs)
+    # plot_embedding_norm(ensemble_preds, y_orders[fold_i], renorm=False)
+    # plt.savefig("violinplot_tree_%s.png" % data_name, dpi=300)
+
+combined_test_preds = [np.concatenate(pred)[:, 0] for pred in test_preds]
+ensemble_preds = np.stack(combined_test_preds, 1).mean(1)
+test_trues = np.concatenate(numeric_y_orders)
+overall_scores = [weighted_spearman_corr(pred, test_trues) for pred in combined_test_preds]
+ensemble_score = weighted_spearman_corr(ensemble_preds, test_trues)
+
+# plt.clf()
+# plot_embedding_norm(ensemble_preds, np.concatenate(y_orders), renorm=False)
+# plt.savefig("violinplot_baseline_all.png", dpi=300)
+
+print()
+print("Overall\t%.3f\t%.3f\t%.3f" % 
+      (np.mean(overall_scores), 
+       np.std(overall_scores), 
+       ensemble_score))
