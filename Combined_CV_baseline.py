@@ -74,8 +74,8 @@ species = ['mouse', 'mouse', 'mouse', 'mouse', 'mouse', 'human',
            'human']
 
 normalization_method = 'rank'
-use_cytoTRACE = True
-model_root = 'model_save'
+use_cytoTRACE = False
+model_root = '/oak/stanford/groups/jamesz/zqwu/developmental_hierarchy/model_save/cv-baseline-noextra'
 
 kwargs = {}
 ### DATASET SETTING ###
@@ -284,7 +284,7 @@ for fold_i in range(len(data_paths)):
     # #                                    y_order=y_orders[fold_i],
     # #                                    **kwargs)
     # plot_embedding_norm(ensemble_preds, y_orders[fold_i], renorm=False)
-    # plt.savefig("violinplot_tree_%s.png" % data_name, dpi=300)
+    # plt.savefig("violinplot_baseline_noextra_%s.png" % data_name, dpi=300)
 
 combined_test_preds = [np.concatenate(pred)[:, 0] for pred in test_preds]
 ensemble_preds = np.stack(combined_test_preds, 1).mean(1)
@@ -294,10 +294,49 @@ ensemble_score = weighted_spearman_corr(ensemble_preds, test_trues)
 
 # plt.clf()
 # plot_embedding_norm(ensemble_preds, np.concatenate(y_orders), renorm=False)
-# plt.savefig("violinplot_baseline_all.png", dpi=300)
+# plt.savefig("violinplot_baseline_noextra_all.png", dpi=300)
 
 print()
 print("Overall\t%.3f\t%.3f\t%.3f" % 
       (np.mean(overall_scores), 
        np.std(overall_scores), 
        ensemble_score))
+
+# %% Evaluate on test data
+test_data = pickle.load(open('temp_save_test_combined_rank.pkl', 'rb'))
+
+
+Xs = [pair[0] for pair in test_data]
+y_orders = [pair[2] for pair in test_data]
+
+data_names = [pair[-1] for pair in test_data]
+scores = [[] for pair in test_data]
+preds = [[] for pair in test_data]
+    
+    
+model = MLP_pred(n_dim=Xs[0].shape[1], **kwargs)
+# model = PoincareEmbedBaseline(n_dim=Xs[0].shape[1], **kwargs)
+
+for i in range(5):
+    for valid_data_name in data_paths:
+        valid_data_name = os.path.split(valid_data_name)[-1].split("_downsampled")[0]
+        model_save = os.path.join(model_root, 'cv-baseline-classification-run%d/cv-baseline-%s' % (i, valid_data_name))
+        score_df = np.array(pd.read_csv(os.path.join(model_save, 'score_output.csv'), header=None))
+        best_model_idx = np.argmax(score_df[:, 2])
+        best_model_path = os.path.join(model_save, "save%d.pt" % score_df[best_model_idx, 0])
+        model.load_state_dict(t.load(best_model_path, map_location=lambda storage, loc: storage))
+        
+        for j, (X, y_order) in enumerate(zip(Xs, y_orders)):
+            inputs = t.from_numpy(X).float()
+            if kwargs['gpu']:
+                inputs = inputs.cuda()
+            pred = model.forward(inputs)[1].cpu().data.numpy()
+            score = weighted_spearman_corr(pred, y_order)
+            preds[j].append(pred)
+            scores[j].append(score)
+
+for j, (score, pred) in enumerate(zip(scores, preds)):
+    ensemble_pred = np.stack(pred, 0).mean(0)
+    ensemble_corr = weighted_spearman_corr(ensemble_pred, y_orders[j])
+    print("%s\t%.3f\t%.3f\t%.3f" % (data_names[j], np.mean(score), np.std(score), ensemble_corr))
+            

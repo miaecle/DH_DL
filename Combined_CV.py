@@ -75,7 +75,7 @@ species = ['mouse', 'mouse', 'mouse', 'mouse', 'mouse', 'human',
 
 normalization_method = 'rank'
 use_cytoTRACE = False
-model_root = 'model_save'
+model_root = '/oak/stanford/groups/jamesz/zqwu/developmental_hierarchy/model_save/cv-euclidean_tree-noextra'
 
 kwargs = {}
 ### DATASET SETTING ###
@@ -85,7 +85,7 @@ kwargs['n_neg'] = 10
 kwargs['sample_mode'] = 'tree'
 
 ### MODEL SETTING ###
-kwargs['loss_type'] = 'contrastive'
+kwargs['loss_type'] = 'energy'
 kwargs['dist'] = 'poincare'
 kwargs['n_hidden'] = 256
 kwargs['n_poincare'] = 8
@@ -136,7 +136,7 @@ numeric_y_orders = normalize_order(y_orders, dist='euclidean')
 
 # %% Cross Validation setup
 
-for id_run in range(15):
+for id_run in range(5):
     print("RUN%d" % id_run, flush=True)
     test_preds = []
     test_trues = []
@@ -230,8 +230,10 @@ for id_run in range(15):
 
 # %% EVALUATION
 
-test_preds = [[] for _ in range(5)]
-spearman_scores = [[] for _ in range(5)]
+num_runs = 5
+
+test_preds = [[] for _ in range(num_runs)]
+spearman_scores = [[] for _ in range(num_runs)]
 
 for fold_i in range(len(data_paths)):
     data_name = os.path.split(data_paths[fold_i])[-1].split('_downsampled')[0]
@@ -259,7 +261,7 @@ for fold_i in range(len(data_paths)):
         print("Weighted spearman-r:\t%.3f" % test_score)
         return test_score
     
-    for i in range(5):
+    for i in range(num_runs):
         model_save = os.path.join(model_root, 'cv-tree-classification-run%d/cv-tree-%s' % (i, data_name))
         score_df = np.array(pd.read_csv(os.path.join(model_save, 'score_output.csv'), header=None))
         best_model_idx = np.argmax(score_df[:, 1])
@@ -276,7 +278,7 @@ for fold_i in range(len(data_paths)):
     data_name = os.path.split(data_paths[fold_i])[-1].split('_downsampled')[0]
     m = np.mean(spearman_scores[:, fold_i])
     sd = np.std(spearman_scores[:, fold_i])
-    ensemble_preds = np.concatenate([test_preds[i][fold_i] for i in range(5)], 1).mean(1)
+    ensemble_preds = np.concatenate([test_preds[i][fold_i] for i in range(num_runs)], 1).mean(1)
     ensemble_corr = weighted_spearman_corr(ensemble_preds, numeric_y_orders[fold_i])
     print("%s\t%.3f\t%.3f\t%.3f" % 
           (data_name, 
@@ -284,13 +286,13 @@ for fold_i in range(len(data_paths)):
            sd, 
            ensemble_corr))
     
-    # plt.clf()
-    # # test_dataset = HierarchyDataLoader(Xs[fold_i], 
-    # #                                    ys[fold_i], 
-    # #                                    y_order=y_orders[fold_i],
-    # #                                    **kwargs)
-    # plot_embedding_norm(ensemble_preds, y_orders[fold_i], renorm=False)
-    # plt.savefig("violinplot_tree_%s.png" % data_name, dpi=300)
+    plt.clf()
+    # test_dataset = HierarchyDataLoader(Xs[fold_i], 
+    #                                    ys[fold_i], 
+    #                                    y_order=y_orders[fold_i],
+    #                                    **kwargs)
+    plot_embedding_norm(ensemble_preds, y_orders[fold_i], renorm=False)
+    plt.savefig("violinplot_tree_noextra_%s.png" % data_name, dpi=300)
 
 combined_test_preds = [np.concatenate(pred)[:, 0] for pred in test_preds]
 ensemble_preds = np.stack(combined_test_preds, 1).mean(1)
@@ -298,12 +300,81 @@ test_trues = np.concatenate(numeric_y_orders)
 overall_scores = [weighted_spearman_corr(pred, test_trues) for pred in combined_test_preds]
 ensemble_score = weighted_spearman_corr(ensemble_preds, test_trues)
 
-# plt.clf()
-# plot_embedding_norm(ensemble_preds, np.concatenate(y_orders), renorm=False)
-# plt.savefig("violinplot_baseline_all.png", dpi=300)
+plt.clf()
+plot_embedding_norm(ensemble_preds, np.concatenate(y_orders), renorm=False)
+plt.savefig("violinplot_tree_noextra_all.png", dpi=300)
 
 print()
 print("Overall\t%.3f\t%.3f\t%.3f" % 
       (np.mean(overall_scores), 
        np.std(overall_scores), 
        ensemble_score))
+
+# %% Evaluate on test data
+test_data = pickle.load(open('temp_save_test_combined_rank.pkl', 'rb'))
+
+Xs = [pair[0] for pair in test_data]
+y_orders = [pair[2] for pair in test_data]
+
+data_names = [pair[-1] for pair in test_data]
+scores = [[] for pair in test_data]
+preds = [[] for pair in test_data]
+    
+    
+model = PoincareEmbed(n_dim=Xs[0].shape[1], **kwargs)
+
+for i in range(5):
+    for valid_data_name in data_paths:
+        valid_data_name = os.path.split(valid_data_name)[-1].split("_downsampled")[0]
+        model_save = os.path.join(model_root, 'cv-tree-classification-run%d/cv-tree-%s' % (i, valid_data_name))
+        score_df = np.array(pd.read_csv(os.path.join(model_save, 'score_output.csv'), header=None))
+        best_model_idx = np.argmax(score_df[:, 2])
+        best_model_path = os.path.join(model_save, "save%d.pt" % score_df[best_model_idx, 0])
+        model.load_state_dict(t.load(best_model_path, map_location=lambda storage, loc: storage))
+        
+        for j, (X, y_order) in enumerate(zip(Xs, y_orders)):
+            inputs = t.from_numpy(X).float()
+            if kwargs['gpu']:
+                inputs = inputs.cuda()
+            pred = model.forward(inputs)[1].cpu().data.numpy()
+            score = weighted_spearman_corr(pred, y_order)
+            preds[j].append(pred)
+            scores[j].append(score)
+
+for j, (score, pred) in enumerate(zip(scores, preds)):
+    ensemble_pred = np.stack(pred, 0).mean(0)
+    ensemble_corr = weighted_spearman_corr(ensemble_pred, y_orders[j])
+    print("%s\t%.3f\t%.3f\t%.3f" % (data_names[j], np.mean(score), np.std(score), ensemble_corr))
+
+
+
+score_table = np.zeros((len(test_data), len(data_paths)))
+for j, (score, pred) in enumerate(zip(scores, preds)):
+    assert len(pred) == 5 * len(data_paths)
+    for i in range(len(data_paths)):
+        ensemble_preds = []
+        ensemble_preds.extend([pred[len(data_paths)*ct + i] for ct in range(5)])
+        ensemble_pred = np.stack(ensemble_preds, 0).mean(0)
+        ensemble_corr = weighted_spearman_corr(ensemble_pred, y_orders[j])
+        score_table[j, i] = ensemble_corr
+
+sizes = np.array([X.shape[0] for X in Xs]).reshape((-1, 1))
+print((score_table * sizes).sum(0) / sizes.sum())
+print(score_table.mean(0))
+
+            
+score_table = np.zeros((len(test_data), len(data_paths)))
+for j, (score, pred) in enumerate(zip(scores, preds)):
+    assert len(pred) == 5 * len(data_paths)
+    ensemble_preds = []
+    for i in range(len(data_paths)):
+        if i not in [9, 11]:
+            continue
+        ensemble_preds.extend([pred[len(data_paths)*ct + i] for ct in range(5)])
+    ensemble_pred = np.stack(ensemble_preds, 0).mean(0)
+    ensemble_corr = weighted_spearman_corr(ensemble_pred, y_orders[j])
+    score_table[j, 0] = ensemble_corr
+
+sizes = np.array([X.shape[0] for X in Xs]).reshape((-1, 1))
+print((score_table * sizes).sum(0) / sizes.sum())
+print(score_table.mean(0))

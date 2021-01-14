@@ -75,31 +75,12 @@ species = ['mouse', 'mouse', 'mouse', 'mouse', 'mouse', 'human',
            'human', 'mouse', 'mouse', 'mouse', 'mouse', 'mouse',
            'human']
 
-test_data_paths = [
-    # 'data/plateOntogenyDatasets/MACA_marrow_downsampled_with_ontogeny.tsv',
-    'data/dropletOntogenyDatasets/Mouse_Data_Marrow_10x_MACA_downsampled_with_ontogeny.tsv',
-    ]
-test_label_paths = [
-    # 'data/plateOntogenyDatasets/MACA_marrow_phenotype.csv',
-    'data/dropletOntogenyDatasets/Mouse_Data_Marrow_10x_MACA_phenotype.csv',
-    ]
-
 normalization_method = 'rank'
-
-n_same = 8
-n_pos = 1
-n_neg = 10
-
-loss_type = 'contrastive'
-dist = 'poincare'
-gene_subset = False
-use_order = True
-node_loss_weight = 0.
-order_loss_weight = 0.1
-
-# %% Read data
 # Define gene set
 g_set = get_shared_gene_sets(data_paths, species)
+
+
+# %% Read data
 
 # Load data
 combined_data = []
@@ -130,3 +111,125 @@ with open('./temp_save_combined_%s.pkl' % normalization_method, 'wb') as f:
     pickle.dump(combined_data, f)
 
 combined_data = pickle.load(open('./temp_save_combined_%s.pkl' % normalization_method, 'rb'))
+
+# %% Prepare for test data
+
+datasets = [
+    "Lung_fibroblast_C1",
+    "Cortical_interneurons_C1",
+    "Lung_development_C1",
+    "Dentate_gyrus_timepoints_10x",
+    "Hair_epidermis_C1",
+    "Skeletal_stem_cells_C1",
+    "Germ_cells_Smartseq2",
+    "Hepatoblast_smart_seq2",
+    "Thymus_Dropseq",
+    "Peripheral_glia_Smart_seq2",
+    "Blastocyst_phenotypes_SC3_seq",
+    "Dentate_gyrus_phenotypes_10x",
+    "Pancreatic_beta_cell_Smart_seq2",
+    "Aging_HSCs_Smartseq2",
+    "Neural_stem_cells_Dropseq",
+    "mESC_invitro_ramDAseq",
+    "Oligodendrocytes_timepoints_C1",
+    "Lgr5CreER_intestine_CEL_seq",
+    "Embryonic_HSCs_Tang_et_al",
+    "Endometrium_CEL_seq",
+    "HSMM_C1",
+    "Invitro_NPCs_C1",
+    "Oligodendrocytes_phenotypes_C1",
+    "Pancreatic_alpha_cell_Smart_seq2",
+    "hESC_in_vitro_C1",
+    "Medial_ganglionic_eminence_C1",
+    "Early_zebrafish_drop_seq",
+    # "Whole_planaria_Dropseq",
+]
+
+species = [
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Human",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Human", # Actually "Macaque"
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Mouse",
+    "Human",
+    "Human",
+    "Mouse",
+    "Mouse",
+    "Human",
+    "Mouse",
+    "Human", # Actually Zebrafish
+    # "Planaria",
+]
+
+gene_mapping_table='data/homologene.mouse2human.txt'
+mapping = pd.read_table(gene_mapping_table)
+mapping = dict(zip(mapping['mouseGene'], mapping['humanGene']))
+
+combined_data = []
+for dataset, specie in zip(datasets, species):
+    X_df = pd.read_csv("data/storeWebsiteDatasets/" + dataset + "_downsampled.tsv", sep='\t', index_col=0).T
+    y = pd.read_csv("data/storeWebsiteDatasets/" + dataset + "_phenotypes.csv")
+    assert X_df.shape[0] == y.shape[0]
+    
+    if specie.lower() not in ["mouse", "human"]:
+        continue
+    print(dataset)
+    X = np.zeros((X_df.shape[0], len(g_set)))
+    ct = 0
+    for col in X_df.columns:
+        try:
+            if specie.lower() == "human":
+                gene_name = col.upper()
+            elif specie.lower() == "mouse":
+                if col.upper() in mapping:
+                    gene_name = mapping[col.upper()].upper()
+                else:
+                    continue
+            if gene_name in g_set:
+                ind = g_set.index(gene_name)
+                X[:, ind] = np.array(X_df[col])
+                ct += 1
+        except Exception as e:
+            print(e)
+            print("Cannot parse gene %s" % str(col))
+            
+    print("Found %d/%d genes" % (ct, len(g_set)))
+    
+    y = np.array(y)
+    valid_row_inds = np.where(y == y)[0]
+    y = list(y[valid_row_inds][:, 0])
+    X = X[valid_row_inds]
+    
+    cell_ids = [X_df.index[i] for i in valid_row_inds]
+    genes = g_set
+    y_order = y
+        
+    if normalization_method == 'sd':
+        X = X / (1e-5 + X.std(0, keepdims=True)) # looking for better batch correction method
+    elif normalization_method == 'rank':
+        X = normalize_as_rank(X, mode='sort')
+    print(X.shape)
+    combined_data.append((X, 
+                          y, 
+                          y_order,
+                          cell_ids, 
+                          genes,
+                          dataset))
+
+# with open('temp_save_test_combined_rank.pkl', 'wb') as f:
+#     pickle.dump(combined_data, f)
