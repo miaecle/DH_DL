@@ -253,13 +253,6 @@ for fold_i in range(len(data_paths)):
     
     ### Define Model ###
     model = PoincareEmbed(n_dim=test_dataset.X.shape[1], **kwargs)
-        
-    def evaluate(model):
-        test_preds = model.predict(test_dataset)
-        test_trues = test_dataset.y_order
-        test_score = weighted_spearman_corr(test_preds, test_trues)
-        print("Weighted spearman-r:\t%.3f" % test_score)
-        return test_score
     
     for i in range(num_runs):
         model_save = os.path.join(model_root, 'cv-tree-classification-run%d/cv-tree-%s' % (i, data_name))

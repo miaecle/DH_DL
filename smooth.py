@@ -4,22 +4,28 @@ import csv
 
 
 def euclidean_similarity(si, sj):
-    return -np.linalg.norm(si - sj, ord=2)
+    return -np.linalg.norm(si - sj, ord=2, axis=-1)
 
 
 def cosine_similarity(si, sj):
-    return np.dot(si, sj) / (np.sqrt(np.dot(si, si)) * np.sqrt(np.dot(sj, sj)))
+    return (si * sj).sum(2) / (np.sqrt((si**2).sum(2)) * np.sqrt((sj**2).sum(2)))
 
 
 def find_kNN(samples, pool, k=20, sim_fn=euclidean_similarity):
     assert len(samples.shape) == len(pool.shape) == 2
     assert samples.shape[1] == pool.shape[1]
     assert pool.shape[0] > k
+    n_dim = samples.shape[1]
+
+    batch_size = int(np.floor(10000 / n_dim))
+    n_batches = int(np.ceil(samples.shape[0] / batch_size))
 
     kNN_inds = []
-    for s in samples:
-        sims = [sim_fn(s, p) for p in pool]
-        kNN_inds.append(np.argsort(sims)[-k:])
+    for i in range(n_batches):
+        batch = samples[(i*batch_size):((i+1)*batch_size)]
+        batch_sim = sim_fn(batch.reshape((-1, 1, n_dim)), pool.reshape((1, -1, n_dim)))[0]
+        batch_kNNs = [np.argsort(row_sim)[-k:] for row_sim in batch_sim]
+        kNN_inds.extend(batch_kNNs)
     return np.array(kNN_inds)
 
 
@@ -30,11 +36,11 @@ def smooth_test_with_train(test_Xs,
                            neighbor_mode='feature', # feature or embedding
                            average_mode='feature', # feature or embedding or label
                            k=20,
-                           sim_fn=euclidean_similarity)
+                           sim_fn=euclidean_similarity):
 
     test_embedding = None
     train_embedding = None
-    if model is not None
+    if model is not None:
         test_inputs = t.from_numpy(test_Xs).float()
         train_inputs = t.from_numpy(train_Xs).float()
         if model.gpu:

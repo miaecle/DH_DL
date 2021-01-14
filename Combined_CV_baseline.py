@@ -176,16 +176,6 @@ for id_run in range(5):
         ### Define Model ###
         model = MLP_pred(n_dim=train_dataset.X.shape[1], **kwargs)
         # model = PoincareEmbedBaseline(n_dim=train_dataset.X.shape[1], **kwargs)
-        
-        def evaluate(model):
-            valid_preds = model.predict(valid_dataset)
-            valid_trues = valid_dataset.y_order
-            valid_score = weighted_spearman_corr(valid_preds, valid_trues)
-            test_preds = model.predict(test_dataset)
-            test_trues = test_dataset.y_order
-            test_score = weighted_spearman_corr(test_preds, test_trues)
-            print("Weighted spearman-r:\t%.3f\t%.3f" % (valid_score, test_score))
-            return (valid_score, test_score)
 
         model_save = os.path.join(model_root, 'cv-baseline-classification-run%d/cv-baseline-%s' % (id_run, data_name))
         os.makedirs(model_save, exist_ok=True)

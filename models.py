@@ -174,7 +174,10 @@ class PoincareEmbed(nn.Module):
         
         
     def predict(self, dataset):
-        inputs = t.from_numpy(dataset.X).float()
+        if isinstance(dataset, np.ndarray):
+            inputs = t.from_numpy(dataset).float()
+        else:
+            inputs = t.from_numpy(dataset.X).float()
         if self.gpu:
             inputs = inputs.cuda()
         return self.forward(inputs)[1].cpu().data.numpy()
@@ -301,7 +304,10 @@ class PoincareEmbedBaseline(nn.Module):
         return loss, loss_dict    
         
     def predict(self, dataset):
-        inputs = t.from_numpy(dataset.X).float()
+        if isinstance(dataset, np.ndarray):
+            inputs = t.from_numpy(dataset).float()
+        else:
+            inputs = t.from_numpy(dataset.X).float()
         if self.gpu:
             inputs = inputs.cuda()
         return self.forward(inputs)[1].cpu().data.numpy()
@@ -374,7 +380,10 @@ class MLP_pred(nn.Module):
 
         
     def predict(self, dataset):
-        inputs = t.from_numpy(dataset.X).float()
+        if isinstance(dataset, np.ndarray):
+            inputs = t.from_numpy(dataset).float()
+        else:
+            inputs = t.from_numpy(dataset.X).float()
         if self.gpu:
             inputs = inputs.cuda()
         return self.forward(inputs)[1].cpu().data.numpy()
