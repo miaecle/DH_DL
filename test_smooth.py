@@ -172,7 +172,7 @@ def main(args):
                 pool_data = np.concatenate([train_Xs, test_Xs], 0)
             
             _test_Xs = None
-            if neighbor_mode == 'feature':
+            if average_mode == 'feature' and neighbor_mode == 'feature':
                 _test_Xs = smooth_test_with_train(test_Xs,
                                                   pool_data,
                                                   model=None,
@@ -191,7 +191,7 @@ def main(args):
                 best_model_path = os.path.join(model_save, "save%d.pt" % score_df[best_model_idx, 0])
                 model.load_state_dict(t.load(best_model_path, map_location=lambda storage, loc: storage))
         
-                if neighbor_mode == 'embedding':
+                if average_mode == 'feature' and neighbor_mode == 'embedding':
                     _test_Xs = smooth_test_with_train(test_Xs,
                                                       pool_data,
                                                       model=model,
@@ -199,7 +199,31 @@ def main(args):
                                                       average_mode=average_mode,
                                                       k=k,
                                                       sim_fn=sim_fn)
-                test_pred = model.predict(_test_Xs)
+
+                test_pred = None
+                if average_mode == 'feature':
+                    assert _test_Xs is not None
+                    test_pred = model.predict(_test_Xs)
+                elif average_mode == 'embedding':
+                    _test_embs = smooth_test_with_train(test_Xs,
+                                                        pool_data,
+                                                        model=model,
+                                                        neighbor_mode=neighbor_mode,
+                                                        average_mode=average_mode,
+                                                        k=k,
+                                                        sim_fn=sim_fn)
+                    _test_embs = t.from_numpy(_test_embs).float()
+                    if model.gpu:
+                        _test_embs = _test_embs.cuda()
+                    test_pred = model.pred_head(_test_embs).cpu().data.numpy()
+                elif average_mode == 'label':
+                    test_pred = smooth_test_with_train(test_Xs,
+                                                       pool_data,
+                                                       model=model,
+                                                       neighbor_mode=neighbor_mode,
+                                                       average_mode=average_mode,
+                                                       k=k,
+                                                       sim_fn=sim_fn)
                 test_preds[i].append(test_pred)
                 spearman_scores[i].append(weighted_spearman_corr(test_pred, test_y_orders))
         
@@ -223,21 +247,21 @@ def main(args):
                                                        ensemble_score))
 
     # %% RUN
-    average_mode = 'feature'
     for use_pool in ['train', 'test', 'train+test']:
-        for neighbor_mode in ['feature', 'embedding']:
-            for k in [10, 20, 40]:
-                for sim_fn in [euclidean_similarity, cosine_similarity]:
-                    if neighbor_mode == 'feature' and 'train' in use_pool:
-                        # skipping
-                        continue
-                    with open(output_path, 'a') as f:
-                        f.write("%s_%s_%d_%s\n" % (use_pool, neighbor_mode, k, sim_fn.__name__))
-                    evaluate(use_pool=use_pool,
-                             neighbor_mode=neighbor_mode, 
-                             average_mode=average_mode, 
-                             k=k, 
-                             sim_fn=sim_fn)
+      for neighbor_mode in ['feature', 'embedding']:
+        for average_mode in ['embedding', 'label']:
+          for k in [10, 20, 40]:
+              for sim_fn in [euclidean_similarity, cosine_similarity]:
+                if neighbor_mode == 'feature' and 'train' in use_pool:
+                    # skipping
+                    continue
+                with open(output_path, 'a') as f:
+                    f.write("%s_%s_%s_%d_%s\n" % (use_pool, neighbor_mode, average_mode, k, sim_fn.__name__))
+                evaluate(use_pool=use_pool,
+                         neighbor_mode=neighbor_mode, 
+                         average_mode=average_mode, 
+                         k=k, 
+                         sim_fn=sim_fn)
 
 
 def parse_args():

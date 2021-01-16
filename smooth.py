@@ -72,8 +72,13 @@ def smooth_test_with_train(test_Xs,
         if model.gpu:
             test_inputs = test_inputs.cuda()
             train_inputs = train_inputs.cuda()
-        test_embedding = model.forward(test_inputs)[0].cpu().data.numpy()
-        train_embedding = model.forward(train_inputs)[0].cpu().data.numpy()
+        test_embedding, test_preds = model.forward(test_inputs)
+        test_embedding = test_embedding.cpu().data.numpy()
+        test_preds = test_preds.cpu().data.numpy()
+        train_embedding, train_preds = model.forward(train_inputs)
+        train_embedding = train_embedding.cpu().data.numpy()
+        train_preds = train_preds.cpu().data.numpy()
+
     
     if neighbor_mode == 'feature':
         test_keys = test_Xs
@@ -93,8 +98,7 @@ def smooth_test_with_train(test_Xs,
         return np.stack(new_test_embedding, 0)
     elif average_mode == 'label':
         assert model is not None
-        train_preds = model.pred_head(train_embedding)
-        new_test_preds = [np.mean([train_preds[i] for i in kNNs], 0).mean(0) for kNNs in kNN_inds]
-        return np.array(new_test_preds)
+        new_test_preds = [np.stack([train_preds[i] for i in kNNs], 0).mean(0) for kNNs in kNN_inds]
+        return np.stack(new_test_preds, 0)
 
 
