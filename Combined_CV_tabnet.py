@@ -162,7 +162,7 @@ for id_run in range(5):
         print("Number of test samples: %d" % test_Xs.shape[0])
 
         ### Define Model ###
-        model = TabNetRegressor()
+        model = TabNetRegressor(seed=id_run)
 
         def evaluate(model):
             valid_inputs = t.from_numpy(train_Xs[valid_inds].astype(float)).float()
@@ -239,7 +239,7 @@ for fold_i in range(len(data_paths)):
     assert test_Xs.shape[0] == test_ys.shape[0] == test_y_orders.shape[0]
 
     ### Define Model ###
-    model = TabNetRegressor()
+    model = TabNetRegressor(seed=id_run)
     def evaluate(model):
         test_inputs = t.from_numpy(test_Xs.astype(float)).float()
         if kwargs['gpu']:
@@ -314,7 +314,7 @@ data_names = [pair[-1] for pair in test_data]
 scores = [[] for pair in test_data]
 preds = [[] for pair in test_data]
     
-model = TabNetRegressor()
+model = TabNetRegressor(seed=id_run)
 
 for i in range(5):
     for valid_data_name in data_paths:
