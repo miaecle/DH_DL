@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import scipy
 import argparse
 import pandas as pd
+import time
 from sklearn.decomposition import PCA
 import torch as t
 from functools import partial
@@ -247,21 +248,27 @@ def main(args):
                                                        ensemble_score))
 
     # %% RUN
-    for use_pool in ['train', 'test', 'train+test']:
+    for use_pool in ['train', 'test']:
       for neighbor_mode in ['feature', 'embedding']:
         for average_mode in ['embedding', 'label']:
-          for k in [10, 20, 40]:
-              for sim_fn in [euclidean_similarity, cosine_similarity]:
+            sim_fn = cosine_similarity
+            for k in [10, 40]:
                 if neighbor_mode == 'feature' and 'train' in use_pool:
                     # skipping
                     continue
                 with open(output_path, 'a') as f:
                     f.write("%s_%s_%s_%d_%s\n" % (use_pool, neighbor_mode, average_mode, k, sim_fn.__name__))
+
+                t1 = time.time()
                 evaluate(use_pool=use_pool,
                          neighbor_mode=neighbor_mode, 
                          average_mode=average_mode, 
                          k=k, 
                          sim_fn=sim_fn)
+                t2 = time.time()
+
+                with open(output_path, 'a') as f:
+                    f.write("%.3f\n" % (t2 - t1))
 
 
 def parse_args():
