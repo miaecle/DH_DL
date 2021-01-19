@@ -55,50 +55,36 @@ def find_kNN(samples, pool, k=20, sim_fn=euclidean_similarity):
     return np.array(kNN_inds)
 
 
+def get_embeddings(feats, model):
+    feats = torch.from_numpy(feats.astype(float)).float()
+    if model.gpu:
+        feats = feats.cuda()
+    embeddings, preds = model.forward(feats)
+    embeddings = embeddings.cpu().data.numpy()
+    return embeddings
 
-def smooth_test_with_train(test_Xs, 
-                           train_Xs, 
-                           model=None,
-                           neighbor_mode='feature', # feature or embedding
-                           average_mode='feature', # feature or embedding or label
-                           k=20,
-                           sim_fn=euclidean_similarity):
 
-    test_embedding = None
-    train_embedding = None
-    if model is not None:
-        test_inputs = torch.from_numpy(test_Xs).float()
-        train_inputs = torch.from_numpy(train_Xs).float()
-        if model.gpu:
-            test_inputs = test_inputs.cuda()
-            train_inputs = train_inputs.cuda()
-        test_embedding, test_preds = model.forward(test_inputs)
-        test_embedding = test_embedding.cpu().data.numpy()
-        test_preds = test_preds.cpu().data.numpy()
-        train_embedding, train_preds = model.forward(train_inputs)
-        train_embedding = train_embedding.cpu().data.numpy()
-        train_preds = train_preds.cpu().data.numpy()
+def get_preds(feats, model):
+    feats = torch.from_numpy(feats.astype(float)).float()
+    if model.gpu:
+        feats = feats.cuda()
+    embeddings, preds = model.forward(feats)
+    preds = preds.cpu().data.numpy()
+    return preds
 
-    
-    if neighbor_mode == 'feature':
-        test_keys = test_Xs
-        pool = train_Xs
-    elif neighbor_mode == 'embedding':
-        test_keys = test_embedding
-        pool = train_embedding
-        assert test_keys is not None
 
-    kNN_inds = find_kNN(test_keys, pool, k=k, sim_fn=sim_fn)
-    if average_mode == 'feature':
-        new_test_Xs = [np.stack([train_Xs[i] for i in kNNs], 0).mean(0) for kNNs in kNN_inds]
-        return np.stack(new_test_Xs, 0)
-    elif average_mode == 'embedding':
-        assert model is not None
-        new_test_embedding = [np.stack([train_embedding[i] for i in kNNs], 0).mean(0) for kNNs in kNN_inds]
-        return np.stack(new_test_embedding, 0)
-    elif average_mode == 'label':
-        assert model is not None
-        new_test_preds = [np.stack([train_preds[i] for i in kNNs], 0).mean(0) for kNNs in kNN_inds]
-        return np.stack(new_test_preds, 0)
+def get_preds_from_embeddings(embeddings, model):
+    embeddings = torch.from_numpy(embeddings.astype(float)).float()
+    if model.gpu:
+        embeddings = embeddings.cuda()
+    preds = model.pred_head(embeddings)
+    preds = preds.cpu().data.numpy()
+    return preds
+
+
+def smoothing_by_average_kNN(pool, kNN_inds):
+    assembled_samples = [np.stack([pool[i] for i in kNNs], 0).mean(0) for kNNs in kNN_inds]
+    return np.stack(assembled_samples, 0)
+
 
 

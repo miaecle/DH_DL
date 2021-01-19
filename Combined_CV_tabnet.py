@@ -227,6 +227,9 @@ for id_run in range(5):
 test_preds = [[] for _ in range(5)]
 spearman_scores = [[] for _ in range(5)]
 
+### Define Model ###
+model = TabNetRegressor()
+
 for fold_i in range(len(data_paths)):
     data_name = os.path.split(data_paths[fold_i])[-1].split('_downsampled')[0]
     print(data_name)
@@ -238,8 +241,6 @@ for fold_i in range(len(data_paths)):
     
     assert test_Xs.shape[0] == test_ys.shape[0] == test_y_orders.shape[0]
 
-    ### Define Model ###
-    model = TabNetRegressor(seed=id_run)
     def evaluate(model):
         test_inputs = t.from_numpy(test_Xs.astype(float)).float()
         if kwargs['gpu']:
@@ -314,7 +315,7 @@ data_names = [pair[-1] for pair in test_data]
 scores = [[] for pair in test_data]
 preds = [[] for pair in test_data]
     
-model = TabNetRegressor(seed=id_run)
+model = TabNetRegressor()
 
 for i in range(5):
     for valid_data_name in data_paths:
